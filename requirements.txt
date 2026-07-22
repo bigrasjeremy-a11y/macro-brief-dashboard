@@ -5,3 +5,4 @@ beautifulsoup4
 pytz
 yfinance
 streamlit-autorefresh
+openai
