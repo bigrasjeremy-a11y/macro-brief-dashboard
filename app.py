@@ -15,8 +15,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Auto-refresh silently every 60 seconds
-st.autorefresh(interval=60000, limit=None, key="macro_auto_refresh")
+# Auto-refresh silently every 60 seconds (Fixed syntax: st_autorefresh)
+st_autorefresh(interval=60000, limit=None, key="macro_auto_refresh")
 
 # Inject Custom Dark CSS
 st.html("""
@@ -360,7 +360,7 @@ if page_nav == "📊 Macro":
                     </div>
                     """)
                     
-                    # Drop-Down Expander Feature replacing modal dialogs
+                    # Drop-Down Expander Feature
                     with st.expander(f"🔍 Deep Dive Analysis — {sym}"):
                         st.markdown(b_info["deep_dive"])
 
