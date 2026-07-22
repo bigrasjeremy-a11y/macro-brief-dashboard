@@ -9,47 +9,97 @@ from streamlit_autorefresh import st_autorefresh
 from openai import OpenAI
 
 # ---------------------------------------------------------
-# 1. PAGE SETUP & AUTO-REFRESH (EST Timezone)
+# 1. PAGE SETUP & AUTO-REFRESH
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Macro Fundamental Dashboard",
+    page_title="HybridTrader - Macro Desk",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Auto-refresh app every 60 seconds
+# Auto-refresh app silently every 60 seconds
 st_autorefresh(interval=60000, limit=None, key="macro_auto_refresh")
-
-st.markdown("""
-    <style>
-        .stApp { background-color: #0B0E14; color: #E2E8F0; }
-        div[data-testid="stMetric"] { background-color: #161B22; border: 1px solid #30363D; padding: 12px; border-radius: 8px; }
-        .bias-card { background-color: #161B22; padding: 18px; border-radius: 8px; margin-bottom: 14px; border-left: 5px solid #30363D; }
-        .bullish { border-left-color: #10B981 !important; }
-        .bearish { border-left-color: #EF4444 !important; }
-        .neutral { border-left-color: #F59E0B !important; }
-        .badge-bull { color: #10B981; font-weight: bold; }
-        .badge-bear { color: #EF4444; font-weight: bold; }
-        .badge-neu  { color: #F59E0B; font-weight: bold; }
-        h1, h2, h3 { color: #F8FAFC !important; }
-    </style>
-""", unsafe_allow_html=True)
 
 # Enforce Eastern Time Zone (EST / NY Time)
 est_tz = pytz.timezone('America/New_York')
-now_est = datetime.datetime.now(est_tz).strftime("%I:%M:%S %p EST")
+now_est = datetime.datetime.now(est_tz).strftime("%H:%M:%S EST")
+
+# Custom CSS matching the exact HybridTrader UI theme in the image
+st.markdown("""
+    <style>
+        /* Base Dark Theme */
+        .stApp { background-color: #0D0F12; color: #E2E8F0; font-family: 'Inter', sans-serif; }
+        
+        /* Glassmorphic Dark Cards */
+        .macro-card {
+            background-color: #13171D;
+            border: 1px solid #1E232B;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        
+        /* Badges */
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            display: inline-block;
+        }
+        .badge-bullish { background-color: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid #10B981; }
+        .badge-bearish { background-color: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid #EF4444; }
+        .badge-neutral { background-color: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid #F59E0B; }
+        
+        /* Progress Bar for Confidence */
+        .confidence-container {
+            width: 100%;
+            background-color: #1E232B;
+            border-radius: 6px;
+            height: 6px;
+            margin-top: 8px;
+            margin-bottom: 14px;
+        }
+        .confidence-fill {
+            height: 100%;
+            border-radius: 6px;
+            background: linear-gradient(90deg, #10B981, #34D399);
+        }
+        
+        /* Typography */
+        .asset-title { font-size: 1.25rem; font-weight: 700; color: #FFFFFF; }
+        .asset-price { font-size: 0.9rem; font-weight: 600; }
+        .price-up { color: #10B981; }
+        .price-down { color: #EF4444; }
+        .ai-header { font-size: 0.8rem; font-weight: 600; color: #38BDF8; margin-bottom: 4px; }
+        .ai-text { font-size: 0.88rem; color: #94A3B8; line-height: 1.45; }
+        
+        /* Correlation Bar */
+        .corr-item {
+            background-color: #13171D;
+            border: 1px solid #1E232B;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+        h1, h2, h3, h4 { color: #F8FAFC !important; }
+    </style>
+""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. LIVE MARKET & WEB DATA SCRAPERS
+# 2. REAL-TIME DATA FETCHING (yfinance & Web RSS)
 # ---------------------------------------------------------
 @st.cache_data(ttl=60)
 def get_live_prices():
-    """Fetches real-time prices for DXY, XAUUSD, NQ, and US30"""
+    """Fetches real-time price changes for Focus Assets & Correlations"""
     tickers = {
-        "DXY": "DX-Y.NYB",
         "XAUUSD": "GC=F",
         "NQ": "NQ=F",
-        "US30": "YM=F"
+        "US30": "YM=F",
+        "DXY": "DX-Y.NYB",
+        "US10Y": "^TNX",
+        "VIX": "^VIX",
+        "CL": "CL=F"
     }
     data = {}
     for name, ticker in tickers.items():
@@ -66,7 +116,7 @@ def get_live_prices():
 
 @st.cache_data(ttl=120)
 def fetch_web_news():
-    """Pulls breaking economic headlines from Google News RSS"""
+    """Pulls breaking economic news via RSS"""
     try:
         url = "https://news.google.com/rss/search?q=forex+economy+fed+inflation+when:1d&hl=en-US&gl=US&ceid=US:en"
         res = requests.get(url, timeout=5)
@@ -74,46 +124,55 @@ def fetch_web_news():
         items = soup.find_all("item")[:6]
         return [item.title.text for item in items]
     except Exception:
-        return [
-            "Federal Reserve signals caution on upcoming interest rate decisions.",
-            "US Dollar Index consolidates amidst shifting yield environment.",
-            "Equity markets digest recent producer price and consumer sentiment data."
-        ]
+        return ["Fed officials remain cautious ahead of inflation prints.", "US Dollar consolidates amidst rate expectations."]
 
 # ---------------------------------------------------------
-# 3. AI MACRO SYNTHESIS ENGINE (XAUUSD, NQ, US30 ONLY)
+# 3. AI MACRO ENGINE (GPT-4o API Synthesis)
 # ---------------------------------------------------------
 def analyze_macro_with_ai(news_list, prices):
-    """Sends live economic news & market metrics to GPT-4o to output fundamental biases"""
+    """Sends prices & news to GPT-4o to dynamically compute confidence %, biases, and rationale"""
     api_key = st.secrets.get("OPENAI_API_KEY", None)
     
     if not api_key:
         return {
-            "regime": "API KEY MISSING",
+            "mood": "RISK-NEUTRAL",
+            "mood_type": "neutral",
+            "mood_driver": "Add OPENAI_API_KEY to Streamlit Secrets to enable full AI macro synthesis.",
             "biases": {
-                "XAUUSD": {"bias": "NEUTRAL", "type": "neutral", "driver": "Please add OPENAI_API_KEY in Streamlit Secrets to enable live AI web analysis."},
-                "NQ": {"bias": "NEUTRAL", "type": "neutral", "driver": "Please add OPENAI_API_KEY in Streamlit Secrets to enable live AI web analysis."},
-                "US30": {"bias": "NEUTRAL", "type": "neutral", "driver": "Please add OPENAI_API_KEY in Streamlit Secrets to enable live AI web analysis."}
+                "XAUUSD": {"bias": "NEUTRAL", "confidence": 50, "driver": "Awaiting API key integration."},
+                "NQ": {"bias": "NEUTRAL", "confidence": 50, "driver": "Awaiting API key integration."},
+                "US30": {"bias": "NEUTRAL", "confidence": 50, "driver": "Awaiting API key integration."}
             }
         }
     
     client = OpenAI(api_key=api_key)
     
     prompt = f"""
-    You are an institutional macro trader analyzing fundamental biases for Gold (XAUUSD), Nasdaq 100 (NQ), and Dow Jones (US30).
+    You are an institutional macro strategist analyzing market bias for Gold (XAUUSD), Nasdaq 100 (NQ), and Dow Jones (US30).
     
-    Current Web Headlines: {news_list}
+    Current Web News: {news_list}
     Current Asset Prices & % Changes: {prices}
     
-    Synthesize these data points into institutional biases based on US Dollar flows, interest rate outlook, and broader risk sentiment.
-    
-    Output JSON ONLY in this exact format:
+    Synthesize these data points and output JSON ONLY in this exact structure:
     {{
-        "regime": "RISK-ON or RISK-OFF",
+        "mood": "RISK-ON, RISK-OFF, or RISK-NEUTRAL",
+        "mood_driver": "2-3 sentences providing an executive summary of capital flows and overall market sentiment.",
         "biases": {{
-            "XAUUSD": {{"bias": "BULLISH/BEARISH/NEUTRAL", "driver": "1 concise sentence explaining the fundamental driver (e.g. Fed policy, DXY, real yields, safe haven flow)"}},
-            "NQ": {{"bias": "BULLISH/BEARISH/NEUTRAL", "driver": "1 concise sentence explaining the fundamental driver (e.g. yield impact on growth tech, rate expectations)"}},
-            "US30": {{"bias": "BULLISH/BEARISH/NEUTRAL", "driver": "1 concise sentence explaining the fundamental driver (e.g. industrial earnings, cyclical rotation, economic strength)"}}
+            "XAUUSD": {{
+                "bias": "BULLISH/BEARISH/NEUTRAL",
+                "confidence": 78,
+                "driver": "1-2 concise sentences explaining the institutional driver (e.g. rate cut expectations, real yields, safe-haven demand)."
+            }},
+            "NQ": {{
+                "bias": "BULLISH/BEARISH/NEUTRAL",
+                "confidence": 84,
+                "driver": "1-2 concise sentences explaining the institutional driver (e.g. tech valuation pressure, treasury yields, earnings sentiment)."
+            }},
+            "US30": {{
+                "bias": "BULLISH/BEARISH/NEUTRAL",
+                "confidence": 68,
+                "driver": "1-2 concise sentences explaining the institutional driver (e.g. industrial rotation, cyclical economic health)."
+            }}
         }}
     }}
     """
@@ -125,81 +184,129 @@ def analyze_macro_with_ai(news_list, prices):
             response_format={"type": "json_object"}
         )
         import json
-        res_json = json.loads(response.choices[0].message.content)
-        
-        for k, v in res_json["biases"].items():
-            v["type"] = v["bias"].lower()
-            
-        return res_json
+        return json.loads(response.choices[0].message.content)
     except Exception as e:
         return {
-            "regime": "ANALYSIS ERROR",
+            "mood": "NEUTRAL",
+            "mood_driver": f"Error running AI analysis: {str(e)}",
             "biases": {
-                "XAUUSD": {"bias": "NEUTRAL", "type": "neutral", "driver": f"Error running AI analysis: {str(e)}"},
-                "NQ": {"bias": "NEUTRAL", "type": "neutral", "driver": "Error running AI analysis."},
-                "US30": {"bias": "NEUTRAL", "type": "neutral", "driver": "Error running AI analysis."}
+                "XAUUSD": {"bias": "NEUTRAL", "confidence": 50, "driver": "Error analyzing market data."},
+                "NQ": {"bias": "NEUTRAL", "confidence": 50, "driver": "Error analyzing market data."},
+                "US30": {"bias": "NEUTRAL", "confidence": 50, "driver": "Error analyzing market data."}
             }
         }
 
 # ---------------------------------------------------------
-# 4. RENDER DASHBOARD
+# 4. RENDER UI
 # ---------------------------------------------------------
 prices = get_live_prices()
 news = fetch_web_news()
-ai_analysis = analyze_macro_with_ai(news, prices)
+ai_res = analyze_macro_with_ai(news, prices)
 
-st.title("⚡ AI MACRO & FUNDAMENTAL DASHBOARD")
-st.caption(f"🤖 Automated Web Analysis | All Times in **New York Time (EST)** | Last Update: **{now_est}**")
-
-st.markdown("---")
-
-# Metrics Bar (EST Focus)
-st.markdown("### 🌐 Live Market Overview")
-m1, m2, m3, m4 = st.columns(4)
-
-dxy = prices.get("DXY", {"price": 0, "change": 0})
-gold = prices.get("XAUUSD", {"price": 0, "change": 0})
-nq = prices.get("NQ", {"price": 0, "change": 0})
-us30 = prices.get("US30", {"price": 0, "change": 0})
-
-with m1:
-    st.metric(label="US Dollar Index (DXY)", value=f"{dxy['price']:.2f}", delta=f"{dxy['change']:+.2f}%")
-with m2:
-    st.metric(label="Macro Regime", value=ai_analysis.get("regime", "RISK-ON"))
-with m3:
-    st.metric(label="Gold (XAUUSD)", value=f"${gold['price']:,.2f}", delta=f"{gold['change']:+.2f}%")
-with m4:
-    st.metric(label="Nasdaq 100 (NQ)", value=f"${nq['price']:,.2f}", delta=f"{nq['change']:+.2f}%")
+# Top Bar Header
+st.title("⚡ HybridTrader — AI Macro Desk")
+st.caption(f"Personal Financial Newspaper • Auto-Updated at **{now_est}**")
 
 st.markdown("---")
 
-# Asset Biases (3 Focus Assets: Gold, NQ, US30)
-st.markdown("### 🎯 Live Fundamental Biases")
-c1, c2, c3 = st.columns(3)
+# Main Dashboard Layout (Left: AI Macro Desk Cards | Right: Capital Flow / Market Mood)
+col_desk, col_flow = st.columns([1.6, 1.0])
 
-biases = ai_analysis.get("biases", {})
-
-asset_cols = [
-    ("XAUUSD", "XAUUSD (Gold)", c1),
-    ("NQ", "NQ (Nasdaq 100)", c2),
-    ("US30", "US30 (Dow Jones)", c3)
-]
-
-for sym, label, col in asset_cols:
-    with col:
-        item = biases.get(sym, {"bias": "NEUTRAL", "type": "neutral", "driver": "Analyzing market conditions..."})
-        p = prices.get(sym, {"price": 0})["price"]
+# --- LEFT COLUMN: AI MACRO DESK ASSET CARDS ---
+with col_desk:
+    st.markdown("### 📈 AI Macro Desk `Market bias analysis` ")
+    
+    # Render Asset Cards: Gold, Nasdaq, Dow
+    assets_info = [
+        ("XAUUSD", "XAUUSD (Gold)", prices.get("XAUUSD", {"price": 0, "change": 0})),
+        ("NQ", "US100 / NQ (Nasdaq)", prices.get("NQ", {"price": 0, "change": 0})),
+        ("US30", "US30 (Dow Jones)", prices.get("US30", {"price": 0, "change": 0}))
+    ]
+    
+    for sym, label, p_data in assets_info:
+        bias_info = ai_res.get("biases", {}).get(sym, {"bias": "NEUTRAL", "confidence": 50, "driver": "Analyzing..."})
+        bias_str = bias_info.get("bias", "NEUTRAL").upper()
+        badge_class = f"badge-{bias_str.lower()}"
+        conf = bias_info.get("confidence", 50)
+        
+        chg_val = p_data["change"]
+        chg_class = "price-up" if chg_val >= 0 else "price-down"
+        chg_str = f"{chg_val:+.2f}%"
+        
         st.markdown(f"""
-        <div class="bias-card {item['type']}">
-            <h3 style="margin:0; font-size:1.15rem;">{label} — <span class="badge-{item['type'][:4]}">{item['bias']}</span></h3>
-            <p style="margin: 8px 0; color: #CBD5E1; font-size: 0.95rem;"><b>Macro Driver:</b> {item['driver']}</p>
-            <p style="margin:0; color: #64748B; font-size: 0.85rem;"><b>Live Price:</b> ${p:,.2f}</p>
+        <div class="macro-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="asset-title">{label}</span>
+                <div>
+                    <span class="asset-price {chg_class}" style="margin-right: 8px;">{chg_str}</span>
+                    <span class="badge {badge_class}">{bias_str}</span>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 12px; font-size: 0.8rem; color: #94A3B8;">
+                <span>Confidence</span>
+                <span style="font-weight: 700; color: #E2E8F0;">{conf}%</span>
+            </div>
+            <div class="confidence-container">
+                <div class="confidence-fill" style="width: {conf}%;"></div>
+            </div>
+            
+            <div class="ai-header">✨ AI Analysis</div>
+            <div class="ai-text">{bias_info.get('driver')}</div>
         </div>
         """, unsafe_allow_html=True)
 
+# --- RIGHT COLUMN: CAPITAL FLOW & MARKET MOOD ---
+with col_flow:
+    st.markdown("### 📊 Capital Flow & Market Mood")
+    
+    mood_val = ai_res.get("mood", "RISK-NEUTRAL").upper()
+    mood_badge = "badge-bullish" if "ON" in mood_val else ("badge-bearish" if "OFF" in mood_val else "badge-neutral")
+    
+    st.markdown(f"""
+    <div class="macro-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span style="font-size: 1.1rem; font-weight: 700;">Market Environment</span>
+            <span class="badge {mood_badge}">{mood_val}</span>
+        </div>
+        <p style="color: #CBD5E1; font-size: 0.92rem; line-height: 1.5;">
+            {ai_res.get("mood_driver")}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # News Wire
+    st.markdown("#### 📡 Breaking Market Headlines")
+    for news_headline in news[:4]:
+        st.caption(f"📰 {news_headline}")
+
 st.markdown("---")
 
-# Breaking Wire
-st.markdown("### 📡 Breaking Economic News Wire (Web Search)")
-for n in news:
-    st.info(f"📰 {n}")
+# --- BOTTOM SECTION: CORRELATION TRACKER ---
+st.markdown("### 🔗 Macro Correlation Tracker (Daily Direction)")
+
+corr_cols = st.columns(4)
+
+correlations = [
+    ("DXY", "US Dollar Index", prices.get("DXY", {"price": 0, "change": 0})),
+    ("US10Y", "10-Year US Yield", prices.get("US10Y", {"price": 0, "change": 0})),
+    ("VIX", "Volatility Index (VIX)", prices.get("VIX", {"price": 0, "change": 0})),
+    ("CL", "Crude Oil (WTI)", prices.get("CL", {"price": 0, "change": 0}))
+]
+
+for idx, (sym, label, p_data) in enumerate(correlations):
+    with corr_cols[idx]:
+        p = p_data["price"]
+        c = p_data["change"]
+        arrow = "▲" if c >= 0 else "▼"
+        color = "#10B981" if c >= 0 else "#EF4444"
+        
+        st.markdown(f"""
+        <div class="corr-item">
+            <div style="font-size: 0.8rem; color: #94A3B8;">{label} ({sym})</div>
+            <div style="font-size: 1.1rem; font-weight: 700; margin: 4px 0;">${p:,.2f}</div>
+            <div style="color: {color}; font-weight: 700; font-size: 0.88rem;">
+                {arrow} {c:+.2f}%
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
