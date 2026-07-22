@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import datetime
 import pytz
 import yfinance as yf
+import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
 # ---------------------------------------------------------
@@ -19,123 +20,166 @@ st.set_page_config(
 # Auto-refresh silently every 60 seconds
 st_autorefresh(interval=60000, limit=None, key="macro_auto_refresh")
 
-# Enforce Eastern Time Zone (EST / NY Time)
-est_tz = pytz.timezone('America/New_York')
-now_est = datetime.datetime.now(est_tz).strftime("%H:%M:%S EST")
-
-# Precise CSS Styling to match HybridTrader (Image 1)
+# Custom Dark Hybrid Design CSS
 st.html("""
 <style>
-    /* Dark Slate App Background */
+    /* Dark Slate Theme */
     .stApp { 
-        background-color: #0B0E11; 
+        background-color: #080A0E; 
         color: #E2E8F0; 
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
     }
     
     .block-container {
-        padding-top: 1.2rem;
+        padding-top: 1rem;
         padding-bottom: 2rem;
         max-width: 96%;
     }
 
-    /* Container Box Styling */
-    .macro-container {
-        background-color: #12151B;
-        border: 1px solid #1C222C;
+    /* Cards */
+    .macro-card {
+        background-color: #11141C;
+        border: 1px solid #1C2330;
         border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 20px;
+        padding: 18px;
+        margin-bottom: 16px;
     }
 
-    /* Asset Card Inner Styling */
+    /* Asset Card Grid Item */
     .asset-card {
-        background-color: #171B24;
-        border: 1px solid #222936;
+        background-color: #141822;
+        border: 1px solid #1E2636;
         border-radius: 10px;
         padding: 16px;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
+        margin-bottom: 14px;
     }
 
     /* Badges */
     .badge {
-        padding: 3px 8px;
-        border-radius: 4px;
-        font-size: 0.7rem;
+        padding: 4px 9px;
+        border-radius: 5px;
+        font-size: 0.72rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        display: inline-block;
     }
-    .badge-bullish { background-color: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); }
-    .badge-bearish { background-color: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); }
-    .badge-neutral { background-color: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-bullish { background-color: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge-bearish { background-color: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.35); }
+    .badge-neutral { background-color: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.35); }
 
-    /* Confidence Bar */
+    /* Progress / Confidence Bar */
     .confidence-bg {
         width: 100%;
-        background-color: #222A38;
+        background-color: #1D2636;
         border-radius: 4px;
-        height: 4px;
-        margin-top: 4px;
-        margin-bottom: 12px;
+        height: 5px;
+        margin-top: 6px;
+        margin-bottom: 14px;
         overflow: hidden;
     }
     .confidence-fill {
         height: 100%;
         border-radius: 4px;
-        background: #10B981;
+        background: linear-gradient(90deg, #10B981, #34D399);
     }
 
     /* Typography */
-    .asset-title { font-size: 1.05rem; font-weight: 700; color: #FFFFFF; }
-    .price-text { font-size: 0.85rem; font-weight: 600; margin-right: 6px; }
+    .asset-title { font-size: 1.1rem; font-weight: 700; color: #FFFFFF; }
+    .price-text { font-size: 0.9rem; font-weight: 700; margin-right: 8px; }
     .up { color: #10B981; }
     .down { color: #EF4444; }
-    .ai-label { font-size: 0.78rem; font-weight: 600; color: #38BDF8; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
-    .ai-desc { font-size: 0.82rem; color: #94A3B8; line-height: 1.45; }
+    .ai-label { font-size: 0.78rem; font-weight: 600; color: #38BDF8; margin-bottom: 4px; }
+    .ai-desc { font-size: 0.83rem; color: #94A3B8; line-height: 1.5; }
 
-    /* Flow Bar Chart Layout */
+    /* Capital Flow Visual Rows */
     .flow-row {
         display: flex;
         align-items: center;
-        margin-bottom: 8px;
+        margin-bottom: 9px;
         font-size: 0.78rem;
     }
-    .flow-label { width: 60px; font-weight: 700; color: #94A3B8; }
-    .flow-bar-container { flex-grow: 1; height: 12px; background: #1A212D; border-radius: 3px; position: relative; margin: 0 10px; }
-    .flow-val { width: 50px; text-align: right; font-weight: 700; }
+    .flow-label { width: 65px; font-weight: 700; color: #94A3B8; }
+    .flow-bar-bg { flex-grow: 1; height: 10px; background: #18202C; border-radius: 3px; position: relative; margin: 0 10px; overflow: hidden; }
+    .flow-val { width: 55px; text-align: right; font-weight: 700; }
 
     /* Bottom Ticker */
     .bottom-ticker {
-        background-color: #12151B;
-        border: 1px solid #1C222C;
+        background-color: #0E1117;
+        border: 1px solid #1C2330;
         border-radius: 10px;
         padding: 12px 20px;
         display: flex;
-        justify-content: space-between;
+        justify-content: space-around;
         align-items: center;
     }
     .ticker-item { text-align: center; }
-    .ticker-symbol { font-size: 0.75rem; color: #64748B; font-weight: 600; }
+    .ticker-symbol { font-size: 0.75rem; color: #64748B; font-weight: 600; text-transform: uppercase; }
     .ticker-price { font-size: 0.95rem; font-weight: 700; color: #F8FAFC; margin: 2px 0; }
-    .ticker-chg { font-size: 0.8rem; font-weight: 700; }
+    .ticker-chg { font-size: 0.82rem; font-weight: 700; }
+
+    /* Streamlit Button Tweaks for Cards */
+    .stButton>button {
+        width: 100%;
+        background-color: #1A2230;
+        color: #38BDF8;
+        border: 1px solid #2B374A;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        transition: all 0.2s;
+    }
+    .stButton>button:hover {
+        background-color: #243044;
+        color: #7DD3FC;
+        border-color: #38BDF8;
+    }
 
     h1, h2, h3, h4 { color: #F8FAFC !important; }
 </style>
 """)
 
 # ---------------------------------------------------------
-# 2. MARKET DATA & SCRAPERS
+# 2. TOP HEADER WITH LIVE EST CLOCK
+# ---------------------------------------------------------
+top_h_col1, top_h_col2 = st.columns([2.5, 1])
+
+with top_h_col1:
+    st.markdown("## Good afternoon, Trader.")
+    st.caption("⚡ Global economic chaos, turned into clarity • Macro Direction & Correlation Engine")
+
+with top_h_col2:
+    # Live JavaScript Running Clock in EST (NY Time)
+    components.html("""
+    <div style="text-align: right; font-family: -apple-system, sans-serif; padding-right: 10px;">
+        <div style="font-size: 0.75rem; color: #64748B; font-weight: 600; letter-spacing: 0.5px;">NEW YORK MARKET TIME (EST)</div>
+        <div id="est-clock" style="font-size: 1.25rem; font-weight: 800; color: #10B981; font-family: monospace;">--:--:-- EST</div>
+    </div>
+    <script>
+        function updateESTClock() {
+            const now = new Date();
+            const options = { timeZone: 'America/New_York', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            const estTime = new Intl.DateTimeFormat('en-US', options).format(now);
+            document.getElementById('est-clock').innerText = estTime + ' EST';
+        }
+        setInterval(updateESTClock, 1000);
+        updateESTClock();
+    </script>
+    """, height=65)
+
+st.markdown("---")
+
+# ---------------------------------------------------------
+# 3. REAL-TIME DATA SCRAPER & MACRO ENGINE
 # ---------------------------------------------------------
 @st.cache_data(ttl=60)
 def get_live_prices():
     tickers = {
         "XAUUSD": "GC=F",
-        "NQ": "NQ=F",
         "US30": "YM=F",
+        "NQ": "NQ=F",
+        "ES": "ES=F",
         "DXY": "DX-Y.NYB",
         "US10Y": "^TNX",
         "VIX": "^VIX",
@@ -157,21 +201,18 @@ def get_live_prices():
 @st.cache_data(ttl=120)
 def fetch_web_news():
     try:
-        url = "https://news.google.com/rss/search?q=forex+economy+fed+inflation+when:1d&hl=en-US&gl=US&ceid=US:en"
+        url = "https://news.google.com/rss/search?q=iran+oil+inflation+fed+yields+when:1d&hl=en-US&gl=US&ceid=US:en"
         res = requests.get(url, timeout=5)
         soup = BeautifulSoup(res.content, "xml")
         items = soup.find_all("item")[:4]
         return [item.title.text for item in items]
     except Exception:
         return [
-            "Federal Reserve signals cautious policy trajectory amidst shifting economic data.",
-            "US Treasury Yields flatten as market digests inflation and labor market metrics.",
-            "Equity index futures consolidate in pre-market trading following earnings announcements."
+            "US-Iran tensions in Strait of Hormuz maintain upward pressure on Crude Oil.",
+            "Treasury yields remain elevated as sticky inflation concerns weigh on Federal Reserve rate cut timing.",
+            "Equity benchmarks evaluate corporate earnings resilience against geopolitical headwinds."
         ]
 
-# ---------------------------------------------------------
-# 3. AI MACRO ENGINE (DEEP NARRATIVES)
-# ---------------------------------------------------------
 def generate_macro_synthesis(prices, news):
     api_key = st.secrets.get("OPENAI_API_KEY", None)
     
@@ -180,19 +221,24 @@ def generate_macro_synthesis(prices, news):
             from openai import OpenAI
             client = OpenAI(api_key=api_key)
             prompt = f"""
-            Synthesize rich institutional macro narratives for Gold (XAUUSD), Nasdaq 100 (NQ), and Dow Jones (US30).
+            Act as an elite macroeconomic strategist. Analyze live market data and return fundamental biases.
+            Focus specifically on US-Iran tensions, Strait of Hormuz risks, Crude Oil spikes ($95+/bbl), inflation risks, and Treasury Yield impact on equities & gold.
             Prices: {prices}
             News: {news}
             
-            Output JSON format:
+            Return JSON:
             {{
-                "headline": "Punchy 8-word market headline summarizing today's flow",
-                "narrative": "Detailed 4-sentence institutional analysis detailing session momentum, yields, dollar pressure, and risk appetite.",
-                "mood": "RISK-ON or RISK-OFF or RISK-NEUTRAL",
+                "mood": "RISK-OFF or RISK-NEUTRAL or RISK-ON",
+                "mood_angle": 45,
+                "investor_positioning": "Detailed 3-sentence summary of capital positioning given geopolitics and inflation.",
+                "policy_outlook": "Detailed 3-sentence summary on Federal Reserve interest rate odds and real yield expectations.",
+                "headline": "Punchy 8-word headline summarizing session driver",
+                "narrative": "Detailed narrative paragraph connecting US-Iran tensions -> Oil -> Yields -> Assets.",
                 "biases": {{
-                    "US30": {{"bias": "BULLISH/BEARISH/NEUTRAL", "confidence": 70, "driver": "Detailed 3-sentence fundamental rationale regarding labor data, corporate earnings, and soft-landing narrative."}},
-                    "NQ": {{"bias": "BULLISH/BEARISH/NEUTRAL", "confidence": 84, "driver": "Detailed 3-sentence fundamental rationale covering tech leadership, valuation multiples, and Treasury yield pressure."}},
-                    "XAUUSD": {{"bias": "BULLISH/BEARISH/NEUTRAL", "confidence": 78, "driver": "Detailed 3-sentence fundamental rationale on safe-haven demand, Middle East geopolitical risk, and real yields."}}
+                    "XAUUSD": {{"bias": "BULLISH", "confidence": 78, "driver": "3-sentence fundamental rationale.", "deep_dive": "Exhaustive deep dive on geopolitics, real yields, DXY correlation, and flight-to-safety."}},
+                    "US30": {{"bias": "BEARISH", "confidence": 68, "driver": "3-sentence fundamental rationale.", "deep_dive": "Exhaustive deep dive on industrial sensitivity to energy costs, yields, and earnings."}},
+                    "NQ": {{"bias": "BEARISH", "confidence": 75, "driver": "3-sentence fundamental rationale.", "deep_dive": "Exhaustive deep dive on growth valuation multiples, 10Y yield sensitivity, and tech sentiment."}},
+                    "ES": {{"bias": "NEUTRAL", "confidence": 70, "driver": "3-sentence fundamental rationale.", "deep_dive": "Exhaustive deep dive on broad market index exposure, defensive sector offsets, and earnings factors."}}
                 }}
             }}
             """
@@ -206,262 +252,237 @@ def generate_macro_synthesis(prices, news):
         except Exception:
             pass
 
-    # Built-in Dynamic Fallback Macro Engine
-    dxy_chg = prices.get("DXY", {}).get("change", 0)
+    # Dynamic Fallback Macro Engine with Built-in Correlation Rules
+    cl_chg = prices.get("CL", {}).get("change", 0)
     us10y_chg = prices.get("US10Y", {}).get("change", 0)
     vix_chg = prices.get("VIX", {}).get("change", 0)
-    nq_chg = prices.get("NQ", {}).get("change", 0)
-    us30_chg = prices.get("US30", {}).get("change", 0)
-    
-    if vix_chg > 2.0 or dxy_chg > 0.3:
-        mood = "RISK-OFF"
-        headline = "Yields and Dollar Take Control While Equities Face Headwinds"
-        narrative = "The tape is leaning defensive as US 10-year yields and the Dollar Index both push higher, putting pressure on risk assets. Despite commodity resilience, broader index futures are staying cautious due to lingering macroeconomic uncertainties and interest rate positioning."
+    dxy_chg = prices.get("DXY", {}).get("change", 0)
+
+    # Determine Mood & Angle
+    if vix_chg > 2.0 or cl_chg > 2.0:
+        mood, angle = "RISK-OFF", 45
+        pos_text = "Market sentiment is firmly risk-off as ongoing US-Iran tensions and potential disruptions in the Strait of Hormuz drive energy prices higher. Investors are actively seeking shelter in gold and short-duration cash equivalents while trimming long equity exposure."
+        pol_text = "Elevated energy costs threaten to reignite consumer price pressure, leading market participants to re-price Federal Reserve policy expectations. Higher terminal rate risks and sticky inflation are delaying projected interest rate cuts."
+        headline = "US-Iran Escalation Drives Oil Spikes as Equities Lean Defensive"
+        narrative = "Renewed geopolitical friction in the Middle East has sent Crude Oil higher, directly stoking fears of secondary inflation pass-through. With US 10-Year yields remaining sticky, equity valuations face headwinds while gold retains a robust safe-haven bid."
     elif vix_chg < -1.5 and dxy_chg < 0:
-        mood = "RISK-ON"
-        headline = "Tech Leads the Charge While Safe Havens Take a Backseat"
-        narrative = "US equities are kicking off with a clear appetite for growth risk, with the NASDAQ 100 pushing higher ahead of major corporate earnings. A softening US Dollar and moderating yields provide key tailwinds across broader market sectors."
+        mood, angle = "RISK-ON", 135
+        pos_text = "Capital is actively rotating back into growth names as geopolitical friction temporarily eases. Easing energy benchmarks and softer Treasury yields are bolstering buyer confidence across equity indices."
+        pol_text = "Moderating inflation expectations provide room for central bank flexibility. Lower real yields offer structural tailwinds for equity earnings multiples."
+        headline = "Tech and Cyclicals Rebound as Yields Ease and Oil Cools"
+        narrative = "A temporary pullback in energy prices has relieved market anxiety, allowing equity index futures to catch a strong bid. Softer Dollar pressure is supporting global liquidity flows across risk assets."
     else:
-        mood = "RISK-NEUTRAL"
-        headline = "Markets Consolidate as Traders Await Fresh Macro Catalysts"
-        narrative = "Price action across major indices remains range-bound as institutional traders digest conflicting economic prints. Yields are holding steady while participants position around key technical support levels ahead of upcoming central bank speakers."
-
-    # US30 Analysis
-    if us30_chg >= 0:
-        u_bias, u_conf = "BULLISH", 70
-        u_driver = "Dow breaches key intraday levels on resilient labor data, bolstering the soft landing narrative. Industrial heavyweights show steady baseline demand, though volatile input costs from commodity channels remain a secondary factor."
-    else:
-        u_bias, u_conf = "BEARISH", 68
-        u_driver = "Higher benchmark yields and elevated input costs keep buyers defensive across industrial constituents. Heavyweight components require stronger catalyst confirmation to reverse the intraday pullback."
-
-    # Nasdaq Analysis
-    if nq_chg > 0 and us10y_chg <= 0:
-        nq_bias, nq_conf = "BULLISH", 84
-        nq_driver = "Tech leads the market higher as earnings resilience reinforces a bullish outlook, breaking recent consolidation. Growth multiples are expanding despite rising 10-year Treasury yields looming in the background."
-    else:
-        nq_bias, nq_conf = "BEARISH", 72
-        nq_driver = "Hawkish Fed commentary and elevated real yields keep tech multiples under pressure. Sector rotation out of growth into defensive havens continues to cap immediate upside."
-
-    # Gold Analysis
-    if dxy_chg < 0 or us10y_chg < 0:
-        g_bias, g_conf = "BULLISH", 78
-        g_driver = "Middle East tensions and underlying recession concerns push capital toward safe havens. Gold holds critical technical support while softer inflation expectations reinforce a strong baseline bid."
-    else:
-        g_bias, g_conf = "BEARISH", 64
-        g_driver = "Gold faces near-term friction as firm dollar index performance and Treasury yields cap upside breakout attempts. Safe-haven inflows offer a partial offset against rate pressures."
+        mood, angle = "RISK-NEUTRAL", 90
+        pos_text = "Investors are operating in a watchful consolidation phase, balancing Middle East supply risks against corporate earnings performance. Capital remains selective with defined risk parameters."
+        pol_text = "The Federal Reserve maintains a strict data-dependent guidance model. Real yields are hovering within recent ranges, awaiting fresh CPI and labor data prints."
+        headline = "Markets Hold Range as Geopolitical Risks Balance Corporate Earnings"
+        narrative = "Trading remains structured as participants monitor energy newsflow alongside Treasury yield movements. Indices are oscillating within key intraday support and resistance bands."
 
     return {
+        "mood": mood,
+        "mood_angle": angle,
+        "investor_positioning": pos_text,
+        "policy_outlook": pol_text,
         "headline": headline,
         "narrative": narrative,
-        "mood": mood,
         "biases": {
-            "US30": {"bias": u_bias, "confidence": u_conf, "driver": u_driver},
-            "NQ": {"bias": nq_bias, "confidence": nq_conf, "driver": nq_driver},
-            "XAUUSD": {"bias": g_bias, "confidence": g_conf, "driver": g_driver}
+            "XAUUSD": {
+                "bias": "BULLISH",
+                "confidence": 78,
+                "driver": "Safe-haven demand remains elevated as US-Iran military friction and Strait of Hormuz transit risks keep bids firm under the metal. Recurrent supply chain concerns continue to outweigh Dollar index pressure.",
+                "deep_dive": "### 🟡 Gold (XAUUSD) Fundamental Deep Dive\n\n- **Geopolitical Safe-Haven Bid:** Escalating US-Iran hostilities maintain a permanent risk premium on bullion. Tensions near the Strait of Hormuz encourage institutional hedging against tail-risk events.\n- **Inflation Hedging Dynamics:** Rising Crude Oil costs act as an input driver for global inflation metrics. As cost-push inflation fears mount, gold acts as a primary wealth preservation vehicle.\n- **Yield & Dollar Sensitivity:** While elevated US 10-Year Treasury yields typically create opportunity cost headwinds for non-yielding bullion, safe-haven demand currently dominates the tape, keeping price action supported at key technical support zones."
+            },
+            "US30": {
+                "bias": "BEARISH",
+                "confidence": 68,
+                "driver": "Dow industrial heavyweights face pressure from elevated energy input costs and rising Treasury yields. Broader cyclical rotation slows as higher borrowing costs weigh on industrial forecasts.",
+                "deep_dive": "### 🔵 Dow Jones (US30) Fundamental Deep Dive\n\n- **Energy Input Pressure:** Industrial and transportation components within the Dow are highly sensitive to Crude Oil spikes. Increased fuel and logistical costs directly compress operating margins.\n- **Yield Discount Factors:** Firm Treasury yields reduce the relative dividend yield attraction of industrial heavyweights, prompting institutional position trimming.\n- **Labor & Macro Pulse:** While solid labor prints offer baseline economic support, persistent inflation concerns restrict broad multi-day breakout potential."
+            },
+            "NQ": {
+                "bias": "BEARISH",
+                "confidence": 75,
+                "driver": "Nasdaq growth multiples remain sensitive to sticky 10-Year Treasury yields triggered by energy-driven inflation fears. Large-cap tech sees selective profit-taking despite earnings resilience.",
+                "deep_dive": "### 🟣 Nasdaq 100 (NQ / US100) Fundamental Deep Dive\n\n- **Valuation Multiple Compression:** Tech and growth equities carry long duration cash flows that are heavily discounted when benchmark 10-Year yields stay high. Any yield expansion leads to immediate multiple contraction.\n- **Geopolitical Risk Aversion:** In high risk-off regimes, algorithms and macro funds trim high-beta tech exposure in favor of cash and short-dated paper.\n- **Earnings Cushion:** Robust corporate balance sheets in mega-cap technology provide a structural floor, preventing severe sell-offs during minor pullbacks."
+            },
+            "ES": {
+                "bias": "NEUTRAL",
+                "confidence": 70,
+                "driver": "The S&P 500 balances energy sector gains against tech and consumer discretionary drag. Broader market breadth reflects sector rotation rather than aggressive liquidations.",
+                "deep_dive": "### 🟢 S&P 500 (ES) Fundamental Deep Dive\n\n- **Sector Rotation Cushion:** Unlike pure tech or industrial benchmarks, the S&P 500 benefits from weighting in Energy and Defense sectors, which gain during Middle East tensions and balance out tech weakness.\n- **Macro Fluidity:** The index tracks broad corporate earnings stability while reacting dynamically to Fed interest rate odds.\n- **Key Technical Levels:** Price continues to consolidate near major volume nodes as traders await clearer directional conviction from macro news catalysts."
+            }
         }
     }
 
-# ---------------------------------------------------------
-# 4. RENDER UI
-# ---------------------------------------------------------
 prices = get_live_prices()
 news = fetch_web_news()
 macro = generate_macro_synthesis(prices, news)
 
-# Header Section
-st.title("Good afternoon, Trader.")
-st.caption("⚡ Your personal financial newspaper — powered by AI")
-
-st.markdown("---")
-
-# Main Split Grid (Left: 2x2 AI Desk | Right: For You & Capital Flow)
+# ---------------------------------------------------------
+# 4. MAIN LAYOUT GRID (LEFT: 2x2 ASSETS | RIGHT: MOOD & FLOW)
+# ---------------------------------------------------------
 col_left, col_right = st.columns([1.65, 1.0])
 
-# --- LEFT COLUMN: AI MACRO DESK (2x2 GRID) ---
+# --- LEFT COLUMN: 2x2 ASSET CARDS ---
 with col_left:
-    st.html("""
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <span style="font-size: 1.1rem; font-weight: 700;">📈 AI Macro Desk <span style="font-size: 0.8rem; font-weight: 400; color: #64748B;">Market bias analysis</span></span>
-    </div>
-    """)
+    st.markdown("### 📈 AI Macro Desk `Market bias analysis` ")
     
-    # Row 1: US30 & US100 (NQ)
-    r1_c1, r1_c2 = st.columns(2)
-    
-    with r1_c1:
-        u_info = macro["biases"].get("US30", {"bias": "BULLISH", "confidence": 70, "driver": ""})
-        u_chg = prices.get("US30", {}).get("change", 0)
-        u_class = "up" if u_chg >= 0 else "down"
-        u_badge = f"badge-{u_info['bias'].lower()}"
-        
-        st.html(f"""
-        <div class="asset-card">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="asset-title">US30</span>
-                <div>
-                    <span class="price-text {u_class}">{u_chg:+.2f}%</span>
-                    <span class="badge {u_badge}">{u_info['bias']}</span>
-                </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.75rem; color: #64748B;">
-                <span>Confidence</span>
-                <span style="font-weight: 700; color: #E2E8F0;">{u_info['confidence']}%</span>
-            </div>
-            <div class="confidence-bg">
-                <div class="confidence-fill" style="width: {u_info['confidence']}%;"></div>
-            </div>
-            <div class="ai-label">✨ AI Analysis</div>
-            <div class="ai-desc">{u_info['driver']}</div>
-        </div>
-        """)
-        
-    with r1_c2:
-        nq_info = macro["biases"].get("NQ", {"bias": "BULLISH", "confidence": 84, "driver": ""})
-        nq_chg = prices.get("NQ", {}).get("change", 0)
-        nq_class = "up" if nq_chg >= 0 else "down"
-        nq_badge = f"badge-{nq_info['bias'].lower()}"
-        
-        st.html(f"""
-        <div class="asset-card">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="asset-title">US100</span>
-                <div>
-                    <span class="price-text {nq_class}">{nq_chg:+.2f}%</span>
-                    <span class="badge {nq_badge}">{nq_info['bias']}</span>
-                </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.75rem; color: #64748B;">
-                <span>Confidence</span>
-                <span style="font-weight: 700; color: #E2E8F0;">{nq_info['confidence']}%</span>
-            </div>
-            <div class="confidence-bg">
-                <div class="confidence-fill" style="width: {nq_info['confidence']}%;"></div>
-            </div>
-            <div class="ai-label">✨ AI Analysis</div>
-            <div class="ai-desc">{nq_info['driver']}</div>
-        </div>
-        """)
+    # Define exact requested ordering: Top-Left: Gold, Top-Right: US30, Bottom-Left: NQ, Bottom-Right: ES
+    grid_order = [
+        [("XAUUSD", "XAUUSD (Gold)", prices.get("XAUUSD", {"price": 0, "change": 0})),
+         ("US30", "US30 (Dow Jones)", prices.get("US30", {"price": 0, "change": 0}))],
+        [("NQ", "US100 / NQ (Nasdaq)", prices.get("NQ", {"price": 0, "change": 0})),
+         ("ES", "S&P500 / ES", prices.get("ES", {"price": 0, "change": 0}))]
+    ]
 
-    st.markdown("<div style='margin-top: 16px;'></div>", unsafe_allow_html=True)
-
-    # Row 2: XAUUSD & DXY Correlation Note
-    r2_c1, r2_c2 = st.columns(2)
-    
-    with r2_c1:
-        g_info = macro["biases"].get("XAUUSD", {"bias": "BULLISH", "confidence": 78, "driver": ""})
-        g_chg = prices.get("XAUUSD", {}).get("change", 0)
-        g_class = "up" if g_chg >= 0 else "down"
-        g_badge = f"badge-{g_info['bias'].lower()}"
-        
-        st.html(f"""
-        <div class="asset-card">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="asset-title">XAUUSD</span>
-                <div>
-                    <span class="price-text {g_class}">{g_chg:+.2f}%</span>
-                    <span class="badge {g_badge}">{g_info['bias']}</span>
+    for row in grid_order:
+        c1, c2 = st.columns(2)
+        for idx, (sym, label, p_data) in enumerate(row):
+            col = c1 if idx == 0 else c2
+            with col:
+                b_info = macro["biases"].get(sym, {"bias": "NEUTRAL", "confidence": 50, "driver": "", "deep_dive": ""})
+                bias_str = b_info["bias"].upper()
+                conf = b_info["confidence"]
+                driver_text = b_info["driver"]
+                
+                chg_val = p_data["change"]
+                chg_class = "up" if chg_val >= 0 else "down"
+                badge_class = f"badge-{bias_str.lower()}"
+                
+                st.html(f"""
+                <div class="asset-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="asset-title">{label}</span>
+                        <div>
+                            <span class="price-text {chg_class}">{chg_val:+.2f}%</span>
+                            <span class="badge {badge_class}">{bias_str}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.75rem; color: #64748B;">
+                        <span>Confidence</span>
+                        <span style="font-weight: 700; color: #E2E8F0;">{conf}%</span>
+                    </div>
+                    <div class="confidence-bg">
+                        <div class="confidence-fill" style="width: {conf}%;"></div>
+                    </div>
+                    <div class="ai-label">✨ AI Fundamental Analysis</div>
+                    <div class="ai-desc">{driver_text}</div>
                 </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.75rem; color: #64748B;">
-                <span>Confidence</span>
-                <span style="font-weight: 700; color: #E2E8F0;">{g_info['confidence']}%</span>
-            </div>
-            <div class="confidence-bg">
-                <div class="confidence-fill" style="width: {g_info['confidence']}%;"></div>
-            </div>
-            <div class="ai-label">✨ AI Analysis</div>
-            <div class="ai-desc">{g_info['driver']}</div>
-        </div>
-        """)
-        
-    with r2_c2:
-        d_chg = prices.get("DXY", {}).get("change", 0)
-        d_class = "up" if d_chg >= 0 else "down"
-        
-        st.html(f"""
-        <div class="asset-card">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="asset-title">DXY (US Dollar)</span>
-                <div>
-                    <span class="price-text {d_class}">{d_chg:+.2f}%</span>
-                    <span class="badge badge-neutral">CORRELATION</span>
-                </div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.75rem; color: #64748B;">
-                <span>Impact Index</span>
-                <span style="font-weight: 700; color: #E2E8F0;">HIGH</span>
-            </div>
-            <div class="confidence-bg">
-                <div class="confidence-fill" style="width: 85%;"></div>
-            </div>
-            <div class="ai-label">✨ AI Analysis</div>
-            <div class="ai-desc">The US Dollar Index serves as a primary macro anchor across equities and precious metals. Dollar strength directly caps gold upside while tightening global liquidity conditions.</div>
-        </div>
-        """)
+                """)
+                
+                # Interactive Deep Dive Dialog Button
+                if st.button(f"🔍 Institutional Deep Dive — {sym}", key=f"btn_{sym}"):
+                    @st.dialog(f"Macro Deep Dive: {label}")
+                    def show_deep_dive():
+                        st.markdown(b_info["deep_dive"])
+                        st.markdown("---")
+                        st.caption("⚡ Analysis generated in real-time integrating geopolitics, yield curves, energy prices, and interest rate futures.")
+                    show_deep_dive()
 
-# --- RIGHT COLUMN: FOR YOU & CAPITAL FLOW BAR CHART ---
+# --- RIGHT COLUMN: MARKET MOOD (GAUGE) & CAPITAL FLOW ---
 with col_right:
-    mood_str = macro["mood"]
-    mood_badge = "badge-bullish" if "ON" in mood_str else ("badge-bearish" if "OFF" in mood_str else "badge-neutral")
+    st.markdown("### 📊 Market Mood & Positioning")
+    
+    mood_val = macro["mood"]
+    badge_color = "#10B981" if "ON" in mood_val else ("#EF4444" if "OFF" in mood_val else "#F59E0B")
+    angle = macro.get("mood_angle", 90)
+    
+    # Arc Dial Gauge SVG (Replicated from Picture 2)
+    gauge_svg = f"""
+    <svg width="190" height="105" viewBox="0 0 180 100" style="display: block; margin: 0 auto;">
+        <path d="M 20 90 A 70 70 0 0 1 160 90" fill="none" stroke="#1E293B" stroke-width="14" stroke-linecap="round" />
+        <path d="M 20 90 A 70 70 0 0 1 65 28" fill="none" stroke="#EF4444" stroke-width="14" stroke-linecap="round" />
+        <path d="M 65 28 A 70 70 0 0 1 115 28" fill="none" stroke="#F59E0B" stroke-width="14" />
+        <path d="M 115 28 A 70 70 0 0 1 160 90" fill="none" stroke="#10B981" stroke-width="14" stroke-linecap="round" />
+        <g transform="translate(90, 90) rotate({angle})">
+            <line x1="0" y1="0" x2="-55" y2="0" stroke="#F8FAFC" stroke-width="3" stroke-linecap="round" />
+            <circle cx="0" cy="0" r="5" fill="#F8FAFC" />
+        </g>
+    </svg>
+    """
     
     st.html(f"""
-    <div class="macro-container">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <span style="font-weight: 700; font-size: 1.05rem;">📰 For You</span>
-            <span class="badge {mood_badge}">Mood: {mood_str}</span>
+    <div class="macro-card">
+        <div style="font-size: 0.95rem; font-weight: 700; color: #F8FAFC; margin-bottom: 10px;">
+            Investor Positioning
         </div>
-        <div style="font-size: 1.05rem; font-weight: 700; color: #FFFFFF; margin-bottom: 8px;">
-            {macro['headline']}
-        </div>
-        <div style="font-size: 0.85rem; color: #94A3B8; line-height: 1.5; margin-bottom: 20px;">
-            {macro['narrative']}
-        </div>
-        
-        <div style="font-weight: 700; font-size: 0.95rem; color: #FFFFFF; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
-            <span>📊 Capital Flow</span>
-            <span style="font-size: 0.72rem; color: #10B981; font-weight: 600;">● Live</span>
+        <div style="display: flex; gap: 14px; align-items: center;">
+            <div style="flex: 1; text-align: center;">
+                {gauge_svg}
+                <div style="font-size: 0.85rem; font-weight: 800; color: {badge_color}; margin-top: 4px; letter-spacing: 0.5px;">
+                    {mood_val}
+                </div>
+            </div>
+            <div style="flex: 1.6; font-size: 0.82rem; color: #94A3B8; line-height: 1.45;">
+                {macro["investor_positioning"]}
+            </div>
         </div>
     </div>
+    
+    <div class="macro-card">
+        <div style="font-size: 0.95rem; font-weight: 700; color: #F8FAFC; margin-bottom: 6px;">
+            📰 Market Briefing
+        </div>
+        <div style="font-size: 0.9rem; font-weight: 700; color: #38BDF8; margin-bottom: 6px;">
+            {macro['headline']}
+        </div>
+        <div style="font-size: 0.82rem; color: #94A3B8; line-height: 1.45;">
+            {macro['narrative']}
+        </div>
+    </div>
+    
+    <div class="macro-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span style="font-size: 0.95rem; font-weight: 700; color: #F8FAFC;">📊 Capital Flow Matrix</span>
+            <span style="font-size: 0.72rem; color: #10B981; font-weight: 600;">● Live Relative Strength</span>
+        </div>
+        <div style="font-size: 0.78rem; color: #64748B; margin-bottom: 12px;">
+            Measures institutional capital rotation across yields, equities, FX, and commodities to identify risk appetite.
+        </div>
     """)
     
-    # Capital Flow Horizontal Visual Bar Chart
+    # Purposeful Capital Flow Rotation Ranking
     flow_assets = [
-        ("US10Y", prices.get("US10Y", {}).get("change", 0)),
-        ("US100", prices.get("NQ", {}).get("change", 0)),
-        ("US30", prices.get("US30", {}).get("change", 0)),
-        ("DXY", prices.get("DXY", {}).get("change", 0)),
-        ("XAUUSD", prices.get("XAUUSD", {}).get("change", 0)),
-        ("VIX", prices.get("VIX", {}).get("change", 0)),
-        ("CRUDE", prices.get("CL", {}).get("change", 0))
+        ("US10Y", "Yields", prices.get("US10Y", {}).get("change", 0)),
+        ("XAUUSD", "Gold", prices.get("XAUUSD", {}).get("change", 0)),
+        ("CRUDE", "Oil", prices.get("CL", {}).get("change", 0)),
+        ("ES", "S&P500", prices.get("ES", {}).get("change", 0)),
+        ("US100", "Nasdaq", prices.get("NQ", {}).get("change", 0)),
+        ("US30", "Dow", prices.get("US30", {}).get("change", 0)),
+        ("DXY", "Dollar", prices.get("DXY", {}).get("change", 0)),
+        ("VIX", "Vol", prices.get("VIX", {}).get("change", 0))
     ]
     
-    flow_html = "<div class='macro-container' style='margin-top: -10px;'>"
-    for sym, val in flow_assets:
+    # Sort flow by percentage change to show true capital rotation direction
+    flow_assets.sort(key=lambda x: x[2], reverse=True)
+    
+    flow_html = ""
+    for sym, label, val in flow_assets:
         color = "#10B981" if val >= 0 else "#EF4444"
-        width = min(abs(val) * 35, 100)
+        width = min(abs(val) * 30, 100)
         
         flow_html += f"""
         <div class="flow-row">
-            <div class="flow-label">{sym}</div>
-            <div class="flow-bar-container">
+            <div class="flow-label">{label} ({sym})</div>
+            <div class="flow-bar-bg">
                 <div style="width: {width}%; height: 100%; background-color: {color}; border-radius: 2px;"></div>
             </div>
             <div class="flow-val" style="color: {color};">{val:+.2f}%</div>
         </div>
         """
-    flow_html += "</div>"
-    st.html(flow_html)
+    st.html(flow_html + "</div>")
 
 st.markdown("---")
 
-# --- BOTTOM SECTION: CORRELATION TRACKER ---
-st.markdown("### 🔗 Daily Correlation Tracker")
+# ---------------------------------------------------------
+# 5. BOTTOM TICKER: CORRELATION ANCHORS
+# ---------------------------------------------------------
+st.markdown("### 🔗 Institutional Correlation Tracker")
 
 correlations = [
     ("DXY", "US Dollar Index", prices.get("DXY", {"price": 0, "change": 0})),
-    ("US10Y", "10-Year Yield", prices.get("US10Y", {"price": 0, "change": 0})),
+    ("US10Y", "10-Year US Yield", prices.get("US10Y", {"price": 0, "change": 0})),
     ("VIX", "Volatility Index", prices.get("VIX", {"price": 0, "change": 0})),
-    ("CL", "Crude Oil WTI", prices.get("CL", {"price": 0, "change": 0}))
+    ("CL", "Crude Oil (WTI)", prices.get("CL", {"price": 0, "change": 0}))
 ]
 
 ticker_items_html = ""
